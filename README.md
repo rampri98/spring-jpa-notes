@@ -1,5 +1,5 @@
 # Spring Data JPA – Performance & Optimization
-
+Note: CODE DOES NOT WORK
 ## 1. Lazy vs Eager Fetching
 
 ### Lazy (Default for collections)
