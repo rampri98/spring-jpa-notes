@@ -1,104 +1,133 @@
-# Spring Data JPA – Repositories
+# Spring Data JPA – Query Features
 
-## 1. Repository Overview
-- Spring Data JPA provides pre-built **repository interfaces** to eliminate boilerplate CRUD code.
-- All repositories extend from the **`Repository`** marker interface.
-- Main repository types:
-  - `CrudRepository<T, ID>` → Basic CRUD operations.
-  - `PagingAndSortingRepository<T, ID>` → CRUD + pagination & sorting.
-  - `JpaRepository<T, ID>` → CRUD + pagination/sorting + JPA-specific features.
-
----
-
-## 2. `CrudRepository`
-- Generic interface for CRUD operations.
-- Common methods:
-  - `save(entity)` → Insert or update.
-  - `findById(id)` → Retrieve one record.
-  - `findAll()` → Retrieve all records.
-  - `deleteById(id)` → Delete by ID.
-  - `count()` → Count total records.
+## 1. Pagination
+- Used to split large results into smaller **pages**.
+- Key interfaces/classes:
+  - `Pageable` → Encapsulates page number, size, sorting.
+  - `Page<T>` → Contains content + pagination metadata.
+  - `Slice<T>` → Similar to `Page`, but only knows if the next slice exists.
 
 ```java
-public interface UserRepository extends CrudRepository<User, Long> { }
+Pageable pageable = PageRequest.of(0, 5, Sort.by("name").ascending());
+Page<User> page = userRepository.findAll(pageable);
+
+List<User> users = page.getContent();
+int totalPages = page.getTotalPages();
+long totalElements = page.getTotalElements();
+```
+
+- **Slice Example** (less overhead, no total count query):
+```java
+Slice<User> slice = userRepository.findAll(pageable);
+boolean hasNext = slice.hasNext();
 ```
 
 ---
 
-## 3. `PagingAndSortingRepository`
-- Extends `CrudRepository` with pagination and sorting features.
-- Key methods:
-  - `findAll(Sort sort)`
-  - `findAll(Pageable pageable)`
+## 2. Sorting
+- `Sort` specifies sorting parameters.
+- Can be combined with `Pageable` or used independently.
 
 ```java
-Page<User> users = userRepository.findAll(
-    PageRequest.of(0, 10, Sort.by("name"))
+List<User> users = userRepository.findAll(Sort.by("name").descending());
+```
+
+- Multiple sort criteria:
+```java
+Sort sort = Sort.by("name").ascending()
+                .and(Sort.by("age").descending());
+```
+
+---
+
+## 3. Dynamic Queries – `Specification`
+- **`Specification<T>`** allows building dynamic queries programmatically.
+- Uses JPA Criteria API under the hood.
+- Common for **complex filters**.
+
+```java
+public class UserSpecifications {
+    public static Specification<User> hasName(String name) {
+        return (root, query, cb) -> cb.equal(root.get("name"), name);
+    }
+}
+```
+
+```java
+List<User> results = userRepository.findAll(
+    Specification.where(UserSpecifications.hasName("Alice"))
 );
 ```
 
----
-
-## 4. `JpaRepository`
-- Extends `PagingAndSortingRepository` and `CrudRepository`.
-- Adds methods like:
-  - `flush()`
-  - `saveAndFlush(entity)`
-  - `deleteInBatch(entities)`
-  - `getOne(id)`
+- Repository must extend `JpaSpecificationExecutor<T>`.
 
 ```java
-public interface UserRepository extends JpaRepository<User, Long> { }
+public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificationExecutor<User> { }
 ```
 
 ---
 
-## 5. Derived Query Methods
-- Queries can be derived **from method names**.
-- Naming convention: [Action]By[Field][Condition][Operator][And/Or][Field][Condition][Operator]...[OrderByFieldAsc/Desc]
-
-- Examples:
-  - `findByName(String name)` → `SELECT * FROM user WHERE name = ?`
-  - `findByAgeGreaterThan(int age)`
-  - `findByNameAndCity(String name, String city)`
-- Common keywords: `And`, `Or`, `Between`, `LessThan`, `Like`, `OrderBy`.
+## 4. Dynamic Queries – `Example` (Query by Example)
+- Simpler than `Specification`, matches based on **probe object**.
+- Useful for **simple matching**.
 
 ```java
-List<User> findByEmailContaining(String keyword);
+User probe = new User();
+probe.setName("Alice");
+Example<User> example = Example.of(probe);
+
+List<User> results = userRepository.findAll(example);
+```
+
+- Can customize matching behavior with `ExampleMatcher`.
+
+```java
+ExampleMatcher matcher = ExampleMatcher.matching()
+        .withIgnoreCase()
+        .withStringMatcher(StringMatcher.CONTAINING);
+Example<User> example = Example.of(probe, matcher);
 ```
 
 ---
 
-## 6. `@Query` Annotation
-- Define custom queries using JPQL or native SQL.
-- JPQL → Uses entity names & fields.
-- Native SQL → Uses table/column names.
+## 5. Named Queries
+- Predefined queries annotated in entity classes.
+- **`@NamedQuery`** → JPQL.
+- **`@NamedNativeQuery`** → Native SQL.
 
 ```java
-@Query("SELECT u FROM User u WHERE u.email = ?1")
-List<User> findByEmailJPQL(String email);
+@Entity
+@NamedQuery(
+    name = "User.findByEmail",
+    query = "SELECT u FROM User u WHERE u.email = ?1"
+)
+@NamedNativeQuery(
+    name = "User.findByEmailNative",
+    query = "SELECT * FROM users WHERE email = ?1",
+    resultClass = User.class
+)
+public class User { ... }
+```
 
-@Query(value = "SELECT * FROM users WHERE email = ?1", nativeQuery = true)
-List<User> findByEmailNative(String email);
+- Usage:
+```java
+List<User> users = entityManager.createNamedQuery("User.findByEmail", User.class)
+                                .setParameter(1, "test@example.com")
+                                .getResultList();
 ```
 
 ---
 
-## 7. Modifying Queries
-- For **update** or **delete** operations.
-- Must use `@Modifying` and `@Transactional`.
-
-```java
-@Transactional
-@Modifying
-@Query("UPDATE User u SET u.status = ?2 WHERE u.id = ?1")
-int updateUserStatus(Long id, String status);
-```
+## 6. Workflow Summary
+1. Use **Pagination + Sorting** for large datasets.
+2. Use `Specification` for complex and dynamic filtering.
+3. Use `Example` for simple query-by-example patterns.
+4. Use **Named Queries** for reusable, predefined JPQL/SQL.
 
 ---
 
-## 8. Workflow Summary
-1. Choose the correct repository type (`JpaRepository` is most common).
-2. Use **derived query methods** for simple queries.
-3. Use `@Query` for complex/custom queries.
-4. Use `@Modifying` with `@Transactional` for update/delete queries.
+## 7. Interview Tips
+- **Page** gives total elements & total pages, **Slice** does not.
+- `Specification` → More flexible, better for complex conditions.
+- `Example` → Quick and simple, but less powerful.
+- Prefer **JPQL named queries** over native ones for portability.

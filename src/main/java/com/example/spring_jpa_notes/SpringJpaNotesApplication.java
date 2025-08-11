@@ -4,8 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.util.List;
 
@@ -20,37 +20,54 @@ public class SpringJpaNotesApplication  implements CommandLineRunner  {
 
 	@Override
 	public void run(String... args) {
-		// Create sample students
-		studentRepo.save(new Student(null, "Alice", 20, "alice@example.com"));
-		studentRepo.save(new Student(null, "Bob", 25, "bob@gmail.com"));
-		studentRepo.save(new Student(null, "Charlie", 30, "charlie@yahoo.com"));
+		// Sample Data
+		studentRepo.save(new Student(null, "Alice", 20, "alice@gmail.com"));
+		studentRepo.save(new Student(null, "Bob", 25, "bob@yahoo.com"));
+		studentRepo.save(new Student(null, "Charlie", 30, "charlie@gmail.com"));
+		studentRepo.save(new Student(null, "David", 28, "david@hotmail.com"));
+		studentRepo.save(new Student(null, "Eve", 22, "eve@gmail.com"));
 
-		// -------- PagingAndSortingRepository --------
-		System.out.println("\n[PagingAndSortingRepository] First 2 students sorted by age:");
-		studentRepo.findAll(PageRequest.of(0, 2, Sort.by("age").descending()))
-				.forEach(s -> System.out.println(s.getName() + " - " + s.getAge()));
+		// -------- Pagination --------
+		Pageable pageReq = PageRequest.of(0, 2, Sort.by("age").ascending());
+		Page<Student> pageResult = studentRepo.findAll(pageReq);
+		System.out.println("\n[Pagination - Page 0, Size 2, Sorted by Age]");
+		pageResult.forEach(s -> System.out.println(s.getName() + " - " + s.getAge()));
 
-		// -------- Derived Queries --------
-		System.out.println("\n[JpaRepository] Students with 'gmail' in email:");
-		studentRepo.findByEmailContainingIgnoreCase("gmail")
+		// -------- Slice --------
+		Slice<Student> sliceResult = studentRepo.findAll(PageRequest.of(0, 3));
+		System.out.println("\n[Slice - First 3 Records]");
+		sliceResult.forEach(s -> System.out.println(s.getName()));
+
+		// -------- Sorting --------
+		System.out.println("\n[Sorting - Descending by Name]");
+		studentRepo.findAll(Sort.by(Sort.Direction.DESC, "name"))
 				.forEach(s -> System.out.println(s.getName()));
 
-		// -------- JPQL Query --------
-		System.out.println("\n[JPQL] Students older than 24:");
-		studentRepo.getStudentsOlderThan(24).forEach(s -> System.out.println(s.getName()));
+		// -------- Specification (Dynamic Query) --------
+		Specification<Student> spec = Specification
+				.where(StudentSpecifications.ageGreaterThan(22))
+				.and(StudentSpecifications.hasName("Bob"));
 
-		// -------- Native Query --------
-		System.out.println("\n[Native] Students with 'yahoo' domain:");
-		studentRepo.searchByEmailDomain("yahoo").forEach(s -> System.out.println(s.getName()));
+		System.out.println("\n[Specification - Age > 22 AND Name = 'Bob']");
+		studentRepo.findAll(spec).forEach(s -> System.out.println(s.getName()));
 
-		// -------- Modifying Queries --------
-		System.out.println("\n[Modifying] Updating email for Alice...");
-		studentRepo.updateEmailById(1L, "alice@newmail.com");
+		// -------- Example (Query by Example) --------
+		Student probe = new Student();
+		probe.setEmail("gmail.com"); // Partial match
+		ExampleMatcher matcher = ExampleMatcher.matching()
+				.withIgnorePaths("id", "age")
+				.withMatcher("email", ExampleMatcher.GenericPropertyMatchers.contains().ignoreCase());
+		Example<Student> example = Example.of(probe, matcher);
 
-		System.out.println("[Modifying] Deleting students younger than 21...");
-		studentRepo.deleteStudentsYoungerThan(21);
+		System.out.println("\n[Example - Email contains 'gmail.com']");
+		studentRepo.findAll(example).forEach(s -> System.out.println(s.getName()));
 
-		System.out.println("\n[Final List] Remaining Students:");
-		studentRepo.findAll().forEach(s -> System.out.println(s.getName() + " - " + s.getEmail()));
+		// -------- Named Query --------
+		System.out.println("\n[Named Query - Students age >= 25]");
+		studentRepo.findByMinAge(25).forEach(s -> System.out.println(s.getName()));
+
+		// -------- Named Native Query --------
+		System.out.println("\n[Named Native Query - Students with 'hotmail' domain]");
+		studentRepo.findByDomainNative("hotmail").forEach(s -> System.out.println(s.getName()));
 	}
 }
