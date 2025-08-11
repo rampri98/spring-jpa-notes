@@ -10,7 +10,7 @@ import java.util.List;
 @SpringBootApplication
 public class SpringJpaNotesApplication  implements CommandLineRunner  {
 	@Autowired
-	private EmployeeRepo employeeRepo;
+	private UserRepo userRepo;
 
 	public static void main(String[] args) {
 		SpringApplication.run(SpringJpaNotesApplication.class, args);
@@ -18,24 +18,27 @@ public class SpringJpaNotesApplication  implements CommandLineRunner  {
 
 	@Override
 	public void run(String... args) throws Exception {
+		// Create Address object
+		Address address = new Address();
+		address.setStreet("123 Spring Street");
+		address.setCity("Hyderabad");
+		address.setState("Telangana");
+		address.setZipCode("500001");
 
-		Employee e1 = new Employee();
-		e1.setName("Akash");
-		e1.setEmail("ak@mail.com");
-		employeeRepo.save(e1);
+		// Create User object
+		User user = new User();
+		user.setName("Ramya Priyadarshini");
+		user.setEmail("ramya@example.com");
+		user.setAgeInYears(26); // Won’t be stored in DB (Transient)
+		user.setAddress(address);
 
-		Employee e2 = new Employee();
-		e2.setName("Ramya");
-		e2.setEmail("rp@mail.com");
-		employeeRepo.save(e2);
+		// Save to DB
+		userRepo.save(user);
 
-		Employee e3 = new Employee();
-		e3.setName("Grace");
-		e3.setEmail("gc@mail.com");
-		employeeRepo.save(e3);
-
-		// Fetch all
-		List<Employee> emps = employeeRepo.findAll();
-		emps.forEach(e -> System.out.println(e.getName()));
+		// Fetch and print
+		userRepo.findAll().forEach(u -> {
+			System.out.println("User: " + u.getName() + ", Email: " + u.getEmail());
+			System.out.println("City: " + u.getAddress().getCity());
+		});
 	}
 }

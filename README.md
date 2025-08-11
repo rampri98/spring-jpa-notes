@@ -1,88 +1,119 @@
-# Spring Data JPA – Basics & Core Concepts
+# Spring Data JPA – Entity Mapping
 
-## 1. What is JPA?
-- **Java Persistence API (JPA)** is a **specification** for mapping Java objects to relational database tables.
-- It is **not a framework** or implementation — it defines a set of interfaces and rules.
-- Common JPA implementations:
-    - **Hibernate** (most popular, default in Spring Boot)
-    - EclipseLink, OpenJPA
-- JPA itself doesn’t perform DB operations — it needs a provider (e.g., Hibernate).
+## 1. Entity Basics
+### `@Entity`
+- Marks a class as a **JPA entity** (maps to a DB table).
+- Must have:
+  - A no-argument constructor (can be `protected`).
+  - A primary key field.
+- The class **must not be final** and **fields must be non-final** for proxying.
 
-**Example (JPA Entity)**
 ```java
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "users")
 public class User {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    private String name;
-
-    // getters & setters
+    // fields, getters, setters
 }
 ```
 
 ---
 
-## 2. JPA vs Hibernate vs JDBC
-- Hibernate → A JPA implementation + its own extra proprietary features.
-- Spring Data JPA → A Spring abstraction that uses JPA (and usually Hibernate under the hood) but hides a lot of boilerplate.
+## 2. Table Mapping
+### `@Table`
+- Customizes table details.
+- Common attributes:
+  - `name` → table name in DB
+  - `schema` → schema name (if applicable)
+  - `uniqueConstraints` → for unique combinations
 
-| Feature          | JPA (Specification)          | Hibernate (Implementation)    | JDBC (Low-Level API) |
-|------------------|------------------------------|--------------------------------|----------------------|
-| Type             | Specification                | Framework implementing JPA     | Java API for SQL     |
-| SQL Writing      | Mostly hidden via JPQL       | Mostly hidden via JPQL         | Manual SQL writing   |
-| Mapping          | Object–Relational Mapping    | ORM + extra features           | Manual ResultSet mapping |
-| Productivity     | High                         | High                           | Low                  |
-| Flexibility      | Depends on provider          | High                           | High but verbose     |
-
----
-
-## 3. ORM Concepts in JPA
-
-### a) Entities
-- Java classes annotated with `@Entity`
-- Represent a table in DB
-- Fields = table columns
-
-### b) Persistence Context
-- A **session-like cache** where JPA entities are managed by the EntityManager.
-- Ensures **automatic dirty checking** (changes in objects are tracked and updated in DB without explicit `UPDATE` calls).
-
-### c) Transactions
-- Group of operations that execute **atomically** (all or nothing).
-- In Spring Data JPA:
-    - Handled automatically with `@Transactional`
-    - Ensures data consistency.
-
----
-
-## 4. Role of Spring Data JPA
-- **Goal**: Eliminate boilerplate code for repository/DAO layers.
-- Extends JPA by providing:
-    - Auto-implemented repository interfaces
-    - Derived queries (method name-based)
-    - Pagination and sorting support
-- Works on top of JPA + a provider (Hibernate by default in Spring Boot).
-
-**Example (Spring Data JPA Repository)**
 ```java
-import org.springframework.data.jpa.repository.JpaRepository;
+@Entity
+@Table(name = "users", schema = "app_schema")
+public class User {  }
+```
 
-public interface UserRepository extends JpaRepository<User, Long> {
-    // Derived query method
-    User findByName(String name);
+---
+
+## 3. Primary Key Mapping
+### `@Id`
+- Marks the **primary key** field.
+
+### `@GeneratedValue`
+- Configures primary key generation strategy.
+- Strategies:
+  - `AUTO` → Provider chooses (default)
+  - `IDENTITY` → Auto-increment by DB
+  - `SEQUENCE` → Uses DB sequence
+  - `TABLE` → Uses table to generate keys
+
+```java
+@Id
+@GeneratedValue(strategy = GenerationType.IDENTITY)
+private Long id;
+```
+
+---
+
+## 4. Column Mapping
+### `@Column`
+- Customizes how a field maps to a column.
+- Common attributes:
+  - `name` → DB column name
+  - `nullable` → `true` (default) or `false`
+  - `length` → Max size (for `VARCHAR`)
+  - `unique` → Adds unique constraint
+
+```java
+@Column(name = "email_address", nullable = false, unique = true, length = 100)
+private String email;
+```
+
+---
+
+## 5. Transient Fields
+### `@Transient`
+- Field is **not persisted** to the database.
+- Used for calculated or temporary values.
+
+```java
+@Transient
+private int sessionLoginAttempts;
+```
+
+---
+
+## 6. Embedded Objects
+- Helps group related fields into reusable components.
+
+### `@Embeddable`
+- Marks a class whose fields are **mapped into the entity’s table**.
+
+```java
+@Embeddable
+public class Address {
+    private String street;
+    private String city;
+}
+```
+
+### `@Embedded`
+- Used inside an entity to include the embeddable object.
+
+```java
+@Entity
+public class User {
+    @Embedded
+    private Address address;
 }
 ```
 
 ---
 
-## 5. Spring Data JPA Workflow
-1. **Define Entity** → Annotate with `@Entity`
-2. **Create Repository Interface** → Extend `JpaRepository`
-3. **Use Repository in Service Layer** → Autowire and call methods
-4. **Spring Boot Auto-Configures** the JPA provider (Hibernate by default)
-
+## 7. Workflow Summary
+1. **Annotate** with `@Entity`
+2. **Map table** with `@Table` (optional)
+3. **Define primary key** with `@Id` + `@GeneratedValue`
+4. **Customize columns** with `@Column`
+5. **Exclude non-persistent** fields with `@Transient`
+6. **Reuse field groups** with `@Embeddable` + `@Embedded`
