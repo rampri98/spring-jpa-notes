@@ -1,5 +1,9 @@
 package com.example.spring_jpa_notes;
 
+import com.example.spring_jpa_notes.entities.Course;
+import com.example.spring_jpa_notes.entities.Enrollment;
+import com.example.spring_jpa_notes.entities.Student;
+import com.example.spring_jpa_notes.repos.StudentRepo;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -9,36 +13,52 @@ import java.util.List;
 
 @SpringBootApplication
 public class SpringJpaNotesApplication  implements CommandLineRunner  {
-	@Autowired
-	private UserRepo userRepo;
 
 	public static void main(String[] args) {
 		SpringApplication.run(SpringJpaNotesApplication.class, args);
 	}
 
+//	@Autowired
+//	private StudentRepo studentRepo;
+
 	@Override
-	public void run(String... args) throws Exception {
-		// Create Address object
-		Address address = new Address();
-		address.setStreet("123 Spring Street");
-		address.setCity("Hyderabad");
-		address.setState("Telangana");
-		address.setZipCode("500001");
+	public void run(String... args) {
+		// Create data
+//		Course c1 = new Course(); c1.setTitle("Mathematics");
+//		Course c2 = new Course(); c2.setTitle("Science");
+//
+//		Student s1 = new Student(); s1.setName("Alice");
+//		Student s2 = new Student(); s2.setName("Bob");
+//
+//		Enrollment e1 = new Enrollment(); e1.setStudent(s1); e1.setCourse(c1); e1.setGrade("A");
+//		Enrollment e2 = new Enrollment(); e2.setStudent(s1); e2.setCourse(c2); e2.setGrade("B");
+//		Enrollment e3 = new Enrollment(); e3.setStudent(s2); e3.setCourse(c1); e3.setGrade("A+");
+//
+//		s1.getEnrollments().add(e1); s1.getEnrollments().add(e2);
+//		s2.getEnrollments().add(e3);
+//
+//		studentRepo.save(s1);
+//		studentRepo.save(s2);
 
-		// Create User object
-		User user = new User();
-		user.setName("Ramya Priyadarshini");
-		user.setEmail("ramya@example.com");
-		user.setAgeInYears(26); // Won’t be stored in DB (Transient)
-		user.setAddress(address);
+		// ❌ N+1 Problem example
+//		System.out.println("\n[Without Optimization] N+1 Problem:");
+//		studentRepo.findAll().forEach(s -> {
+//			System.out.println("Student: " + s.getName());
+//			s.getEnrollments().forEach(en -> System.out.println("  " + en.getCourse().getTitle()));
+//		});
 
-		// Save to DB
-		userRepo.save(user);
+		// ✅ With EntityGraph
+//		System.out.println("\n[With EntityGraph] Single query:");
+//		studentRepo.findAllWithEnrollments().forEach(s -> {
+//			System.out.println("Student: " + s.getName());
+//			s.getEnrollments().forEach(en -> System.out.println("  " + en.getCourse().getTitle()));
+//		});
 
-		// Fetch and print
-		userRepo.findAll().forEach(u -> {
-			System.out.println("User: " + u.getName() + ", Email: " + u.getEmail());
-			System.out.println("City: " + u.getAddress().getCity());
-		});
+		// ✅ With Fetch Join
+//		System.out.println("\n[With Fetch Join] Single query:");
+//		studentRepo.findAllWithEnrollmentsFetchJoin().forEach(s -> {
+//			System.out.println("Student: " + s.getName());
+//			s.getEnrollments().forEach(en -> System.out.println("  " + en.getCourse().getTitle()));
+//		});
 	}
 }

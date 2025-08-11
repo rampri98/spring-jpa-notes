@@ -1,119 +1,113 @@
-# Spring Data JPA – Entity Mapping
+# Spring Data JPA – Performance & Optimization
 
-## 1. Entity Basics
-### `@Entity`
-- Marks a class as a **JPA entity** (maps to a DB table).
-- Must have:
-  - A no-argument constructor (can be `protected`).
-  - A primary key field.
-- The class **must not be final** and **fields must be non-final** for proxying.
+## 1. Lazy vs Eager Fetching
 
-```java
-import jakarta.persistence.*;
-
-@Entity
-public class User {
-    // fields, getters, setters
-}
-```
-
----
-
-## 2. Table Mapping
-### `@Table`
-- Customizes table details.
-- Common attributes:
-  - `name` → table name in DB
-  - `schema` → schema name (if applicable)
-  - `uniqueConstraints` → for unique combinations
-
-```java
-@Entity
-@Table(name = "users", schema = "app_schema")
-public class User {  }
-```
-
----
-
-## 3. Primary Key Mapping
-### `@Id`
-- Marks the **primary key** field.
-
-### `@GeneratedValue`
-- Configures primary key generation strategy.
-- Strategies:
-  - `AUTO` → Provider chooses (default)
-  - `IDENTITY` → Auto-increment by DB
-  - `SEQUENCE` → Uses DB sequence
-  - `TABLE` → Uses table to generate keys
-
-```java
-@Id
-@GeneratedValue(strategy = GenerationType.IDENTITY)
-private Long id;
-```
-
----
-
-## 4. Column Mapping
-### `@Column`
-- Customizes how a field maps to a column.
-- Common attributes:
-  - `name` → DB column name
-  - `nullable` → `true` (default) or `false`
-  - `length` → Max size (for `VARCHAR`)
-  - `unique` → Adds unique constraint
-
-```java
-@Column(name = "email_address", nullable = false, unique = true, length = 100)
-private String email;
-```
-
----
-
-## 5. Transient Fields
-### `@Transient`
-- Field is **not persisted** to the database.
-- Used for calculated or temporary values.
-
-```java
-@Transient
-private int sessionLoginAttempts;
-```
-
----
-
-## 6. Embedded Objects
-- Helps group related fields into reusable components.
-
-### `@Embeddable`
-- Marks a class whose fields are **mapped into the entity’s table**.
-
-```java
-@Embeddable
-public class Address {
-    private String street;
-    private String city;
-}
-```
-
-### `@Embedded`
-- Used inside an entity to include the embeddable object.
+### Lazy (Default for collections)
+- Associated entities are **loaded only when accessed**.
+- Reduces initial query load.
+- Risk: accessing outside a transaction causes `LazyInitializationException`.
 
 ```java
 @Entity
 public class User {
-    @Embedded
-    private Address address;
+    @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    private List<Order> orders;
+}
+```
+
+### Eager
+- Loads associated entities **immediately** with the parent entity.
+- Increases initial query time & memory usage.
+- Use **only** when related data is always needed.
+
+```java
+@Entity
+public class User {
+    @OneToMany(mappedBy = "user", fetch = FetchType.EAGER)
+    private List<Order> orders;
 }
 ```
 
 ---
 
-## 7. Workflow Summary
-1. **Annotate** with `@Entity`
-2. **Map table** with `@Table` (optional)
-3. **Define primary key** with `@Id` + `@GeneratedValue`
-4. **Customize columns** with `@Column`
-5. **Exclude non-persistent** fields with `@Transient`
-6. **Reuse field groups** with `@Embeddable` + `@Embedded`
+## 2. N+1 Query Problem
+
+### What it is:
+- Occurs when fetching a parent list triggers **one query for parents + one query per child**.
+- Example: Fetching 10 users with orders → 1 query for users + 10 queries for orders.
+
+### Solutions:
+
+#### a) Fetch Joins (JPQL)
+- Loads related entities in a single query.
+
+```java
+@Query("SELECT u FROM User u JOIN FETCH u.orders")
+List<User> findAllWithOrders();
+```
+
+#### b) `@EntityGraph`
+- Declaratively specify which relationships to load.
+
+```java
+@EntityGraph(attributePaths = {"orders"})
+List<User> findAll();
+```
+
+---
+
+## 3. Caching
+
+### First-Level Cache (Persistence Context)
+- Default in JPA/Hibernate.
+- EntityManager keeps loaded entities in memory until transaction ends.
+- Transparent to developer; cannot be disabled.
+
+### Second-Level Cache
+- Stores entities across multiple sessions.
+- Requires enabling & configuring cache provider (e.g., Ehcache, Hazelcast).
+- Enabled in `application.properties`:
+```properties
+spring.jpa.properties.hibernate.cache.use_second_level_cache=true
+spring.jpa.properties.hibernate.cache.region.factory_class=org.hibernate.cache.ehcache.EhCacheRegionFactory
+```
+
+- Example:
+```java
+@Entity
+@Cacheable
+@org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
+public class User {}
+```
+
+### Query Cache
+- Stores query results.
+- Must enable second-level cache first.
+```properties
+spring.jpa.properties.hibernate.cache.use_query_cache=true
+```
+
+```java
+List<User> users = entityManager.createQuery("FROM User")
+    .setHint("org.hibernate.cacheable", true)
+    .getResultList();
+```
+
+---
+
+## 4. Best Practices
+- Default to **LAZY** fetching for relationships.
+- Use **JOIN FETCH** or **@EntityGraph** to avoid N+1 queries.
+- Cache **read-mostly** data using second-level cache.
+- Avoid eager loading unless you always need the data.
+- Profile queries using Hibernate’s `show_sql` or tools like p6spy.
+
+---
+
+## 5. What this demonstrates
+- Lazy vs Eager fetching — controlling when related entities are loaded.
+- N+1 problem — why it happens and how to fix it (@EntityGraph / fetch joins).
+- Caching
+  - First-level cache: Always present in Hibernate session (automatic).
+  - Second-level cache: Shared across sessions (requires config).
+  - Query cache: Stores query results, requires explicit enabling.
