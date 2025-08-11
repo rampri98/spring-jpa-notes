@@ -1,119 +1,136 @@
-# Spring Data JPA – Entity Mapping
+# Spring Data JPA – Relationships
 
-## 1. Entity Basics
-### `@Entity`
-- Marks a class as a **JPA entity** (maps to a DB table).
-- Must have:
-  - A no-argument constructor (can be `protected`).
-  - A primary key field.
-- The class **must not be final** and **fields must be non-final** for proxying.
-
-```java
-import jakarta.persistence.*;
-
-@Entity
-public class User {
-    // fields, getters, setters
-}
-```
+## 1. Introduction to Relationships
+- **Goal**: Define how entities relate to each other in the database.
+- Mapped using **JPA annotations**:
+  - `@OneToOne`
+  - `@OneToMany`
+  - `@ManyToOne`
+  - `@ManyToMany`
+- Relationship types reflect **database foreign key constraints**.
 
 ---
 
-## 2. Table Mapping
-### `@Table`
-- Customizes table details.
-- Common attributes:
-  - `name` → table name in DB
-  - `schema` → schema name (if applicable)
-  - `uniqueConstraints` → for unique combinations
-
-```java
-@Entity
-@Table(name = "users", schema = "app_schema")
-public class User {  }
-```
-
----
-
-## 3. Primary Key Mapping
-### `@Id`
-- Marks the **primary key** field.
-
-### `@GeneratedValue`
-- Configures primary key generation strategy.
-- Strategies:
-  - `AUTO` → Provider chooses (default)
-  - `IDENTITY` → Auto-increment by DB
-  - `SEQUENCE` → Uses DB sequence
-  - `TABLE` → Uses table to generate keys
-
-```java
-@Id
-@GeneratedValue(strategy = GenerationType.IDENTITY)
-private Long id;
-```
-
----
-
-## 4. Column Mapping
-### `@Column`
-- Customizes how a field maps to a column.
-- Common attributes:
-  - `name` → DB column name
-  - `nullable` → `true` (default) or `false`
-  - `length` → Max size (for `VARCHAR`)
-  - `unique` → Adds unique constraint
-
-```java
-@Column(name = "email_address", nullable = false, unique = true, length = 100)
-private String email;
-```
-
----
-
-## 5. Transient Fields
-### `@Transient`
-- Field is **not persisted** to the database.
-- Used for calculated or temporary values.
-
-```java
-@Transient
-private int sessionLoginAttempts;
-```
-
----
-
-## 6. Embedded Objects
-- Helps group related fields into reusable components.
-
-### `@Embeddable`
-- Marks a class whose fields are **mapped into the entity’s table**.
-
-```java
-@Embeddable
-public class Address {
-    private String street;
-    private String city;
-}
-```
-
-### `@Embedded`
-- Used inside an entity to include the embeddable object.
+## 2. One-to-One (`@OneToOne`)
+- **Definition**: One entity is related to exactly one other entity.
+- **Example**: User ↔ Profile
+- Usually implemented with a **foreign key in one table** pointing to another.
 
 ```java
 @Entity
 public class User {
-    @Embedded
-    private Address address;
+    @OneToOne
+    @JoinColumn(name = "profile_id") // FK column
+    private Profile profile;
 }
 ```
 
 ---
 
-## 7. Workflow Summary
-1. **Annotate** with `@Entity`
-2. **Map table** with `@Table` (optional)
-3. **Define primary key** with `@Id` + `@GeneratedValue`
-4. **Customize columns** with `@Column`
-5. **Exclude non-persistent** fields with `@Transient`
-6. **Reuse field groups** with `@Embeddable` + `@Embedded`
+## 3. One-to-Many / Many-to-One
+### One-to-Many (`@OneToMany`)
+- One record in the parent → Many records in the child.
+- Usually **bidirectional** with a `@ManyToOne` in the child.
+
+```java
+@Entity
+public class Department {
+    @OneToMany(mappedBy = "department") // 'department' field in Employee
+    private List<Employee> employees;
+}
+```
+
+### Many-to-One (`@ManyToOne`)
+- Many records in the child → One record in the parent.
+- The owning side usually holds the **foreign key**.
+
+```java
+@Entity
+public class Employee {
+    @ManyToOne
+    @JoinColumn(name = "department_id") // FK column
+    private Department department;
+}
+```
+
+---
+
+## 4. Many-to-Many (`@ManyToMany`)
+- Many records in one entity relate to many in another.
+- Implemented with a **join table**.
+
+```java
+@Entity
+public class Student {
+    @ManyToMany
+    @JoinTable(
+        name = "student_course",
+        joinColumns = @JoinColumn(name = "student_id"),
+        inverseJoinColumns = @JoinColumn(name = "course_id")
+    )
+    private List<Course> courses;
+}
+```
+
+---
+
+## 5. `mappedBy`
+- Defines the **inverse side** of a bidirectional relationship.
+- The side with `mappedBy` **does not own the foreign key**.
+- **Owning side** → defines `@JoinColumn` or `@JoinTable`.
+- **Inverse side** → uses `mappedBy` to point to owning side’s field.
+
+---
+
+## 6. Cascade Types
+- Control how operations propagate to related entities.
+- `CascadeType` options:
+  - `PERSIST` → Saves related entities automatically
+  - `MERGE` → Updates related entities automatically
+  - `REMOVE` → Deletes related entities automatically
+  - `REFRESH` → Reloads related entities
+  - `DETACH` → Detaches related entities
+  - `ALL` → All of the above
+
+```java
+@OneToMany(mappedBy = "department", cascade = CascadeType.ALL)
+private List<Employee> employees;
+```
+
+---
+
+## 7. Fetch Types
+- **Lazy** (`FetchType.LAZY`) → Loads relationship only when accessed (default for collections).
+- **Eager** (`FetchType.EAGER`) → Loads relationship immediately (default for single-valued associations like `@OneToOne`).
+
+```java
+@ManyToOne(fetch = FetchType.LAZY)
+private Department department;
+```
+
+---
+
+## 8. Bidirectional vs Unidirectional
+- **Unidirectional**:
+  - Only one entity knows about the relationship.
+  - Simpler, less maintenance.
+- **Bidirectional**:
+  - Both entities are aware.
+  - Must maintain both sides in code to avoid inconsistencies.
+
+---
+
+## 9. Join Tables & Join Columns
+- **`@JoinColumn`** → Maps a foreign key column.
+  - Used in `@OneToOne` and `@ManyToOne`.
+- **`@JoinTable`** → Defines an intermediate join table.
+  - Used in `@ManyToMany` or sometimes `@OneToMany` with a join table.
+
+---
+
+## 10. Workflow Summary
+1. Choose the right **relationship annotation**.
+2. Decide **owning side** vs **inverse side** (`mappedBy`).
+3. Configure **cascades** if needed.
+4. Choose **fetch strategy** wisely (default lazy for collections).
+5. Use **join columns/tables** for mapping in DB.
