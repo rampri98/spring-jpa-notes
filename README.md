@@ -123,11 +123,3 @@ List<User> users = entityManager.createNamedQuery("User.findByEmail", User.class
 2. Use `Specification` for complex and dynamic filtering.
 3. Use `Example` for simple query-by-example patterns.
 4. Use **Named Queries** for reusable, predefined JPQL/SQL.
-
----
-
-## 7. Interview Tips
-- **Page** gives total elements & total pages, **Slice** does not.
-- `Specification` → More flexible, better for complex conditions.
-- `Example` → Quick and simple, but less powerful.
-- Prefer **JPQL named queries** over native ones for portability.
