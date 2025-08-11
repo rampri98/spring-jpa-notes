@@ -1,119 +1,107 @@
-# Spring Data JPA – Entity Mapping
+# Spring Data JPA – Transactions & Locking
 
-## 1. Entity Basics
-### `@Entity`
-- Marks a class as a **JPA entity** (maps to a DB table).
-- Must have:
-  - A no-argument constructor (can be `protected`).
-  - A primary key field.
-- The class **must not be final** and **fields must be non-final** for proxying.
+## 1. `@Transactional` Behavior
+
+### Basics
+- Marks a method or class to run inside a **transaction**.
+- By default:
+  - **Rollback** occurs on `RuntimeException` and `Error`.
+  - **No rollback** for checked exceptions (unless configured).
+- Can be placed at **service layer** (best practice).
 
 ```java
-import jakarta.persistence.*;
+@Service
+public class UserService {
 
-@Entity
-public class User {
-    // fields, getters, setters
+    @Transactional
+    public void createUser(User user) {
+        userRepository.save(user);
+    }
 }
 ```
 
+### Common Properties
+- `readOnly = true` → Optimizes queries for read operations.
+- `rollbackFor = Exception.class` → Rollback for checked exceptions too.
+- `timeout = 5` → Rollback if transaction exceeds 5 seconds.
+
 ---
 
-## 2. Table Mapping
-### `@Table`
-- Customizes table details.
-- Common attributes:
-  - `name` → table name in DB
-  - `schema` → schema name (if applicable)
-  - `uniqueConstraints` → for unique combinations
+## 2. Isolation Levels
+
+### Purpose
+- Defines how transaction integrity is maintained with concurrent transactions.
+
+| Level                | Prevents                        | Notes |
+|----------------------|----------------------------------|-------|
+| READ_UNCOMMITTED     | Nothing                         | Allows dirty reads |
+| READ_COMMITTED       | Dirty reads                     | Default for many DBs |
+| REPEATABLE_READ      | Dirty & non-repeatable reads    | May still allow phantom reads |
+| SERIALIZABLE         | Dirty, non-repeatable, phantom  | Slowest but safest |
+
+```java
+@Transactional(isolation = Isolation.REPEATABLE_READ)
+public void processOrder() { }
+```
+
+---
+
+## 3. Propagation Types
+
+| Type               | Behavior |
+|--------------------|----------|
+| REQUIRED (default) | Join existing transaction or create new if none |
+| REQUIRES_NEW       | Always start a new transaction |
+| MANDATORY          | Must join existing, else throw exception |
+| SUPPORTS           | Join if exists, else run non-transactional |
+| NOT_SUPPORTED      | Run outside transaction |
+| NEVER              | Throw exception if transaction exists |
+| NESTED             | Create nested transaction (savepoint) |
+
+```java
+@Transactional(propagation = Propagation.REQUIRES_NEW)
+public void logAudit(Audit audit) { }
+```
+
+---
+
+## 4. Locking in JPA
+
+### Optimistic Locking (`@Version`)
+- Prevents **lost updates** by checking a version column.
+- If another transaction updates the row, current transaction fails with `OptimisticLockException`.
 
 ```java
 @Entity
-@Table(name = "users", schema = "app_schema")
-public class User {  }
-```
+public class Product {
+    @Id
+    private Long id;
 
----
-
-## 3. Primary Key Mapping
-### `@Id`
-- Marks the **primary key** field.
-
-### `@GeneratedValue`
-- Configures primary key generation strategy.
-- Strategies:
-  - `AUTO` → Provider chooses (default)
-  - `IDENTITY` → Auto-increment by DB
-  - `SEQUENCE` → Uses DB sequence
-  - `TABLE` → Uses table to generate keys
-
-```java
-@Id
-@GeneratedValue(strategy = GenerationType.IDENTITY)
-private Long id;
-```
-
----
-
-## 4. Column Mapping
-### `@Column`
-- Customizes how a field maps to a column.
-- Common attributes:
-  - `name` → DB column name
-  - `nullable` → `true` (default) or `false`
-  - `length` → Max size (for `VARCHAR`)
-  - `unique` → Adds unique constraint
-
-```java
-@Column(name = "email_address", nullable = false, unique = true, length = 100)
-private String email;
-```
-
----
-
-## 5. Transient Fields
-### `@Transient`
-- Field is **not persisted** to the database.
-- Used for calculated or temporary values.
-
-```java
-@Transient
-private int sessionLoginAttempts;
-```
-
----
-
-## 6. Embedded Objects
-- Helps group related fields into reusable components.
-
-### `@Embeddable`
-- Marks a class whose fields are **mapped into the entity’s table**.
-
-```java
-@Embeddable
-public class Address {
-    private String street;
-    private String city;
+    @Version
+    private int version;
 }
 ```
 
-### `@Embedded`
-- Used inside an entity to include the embeddable object.
+### Pessimistic Locking
+- Locks database row until transaction ends.
+- Prevents other transactions from reading/updating.
 
 ```java
-@Entity
-public class User {
-    @Embedded
-    private Address address;
-}
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("SELECT p FROM Product p WHERE p.id = :id")
+Product findByIdForUpdate(@Param("id") Long id);
 ```
+
+| Lock Mode                  | Behavior |
+|----------------------------|----------|
+| PESSIMISTIC_READ           | Prevents writes but allows reads |
+| PESSIMISTIC_WRITE          | Prevents both reads & writes |
+| PESSIMISTIC_FORCE_INCREMENT| Also increments version field |
 
 ---
 
-## 7. Workflow Summary
-1. **Annotate** with `@Entity`
-2. **Map table** with `@Table` (optional)
-3. **Define primary key** with `@Id` + `@GeneratedValue`
-4. **Customize columns** with `@Column`
-5. **Exclude non-persistent** fields with `@Transient`
-6. **Reuse field groups** with `@Embeddable` + `@Embedded`
+## 5. Best Practices
+- Keep transactions **short** to reduce lock contention.
+- Use **optimistic locking** for high-read scenarios.
+- Use **pessimistic locking** only when data integrity is critical & contention is high.
+- Avoid placing `@Transactional` directly on repository methods; use service layer.

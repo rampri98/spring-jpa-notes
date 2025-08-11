@@ -9,36 +9,30 @@ import java.util.List;
 
 @SpringBootApplication
 public class SpringJpaNotesApplication  implements CommandLineRunner  {
-	@Autowired
-	private UserRepo userRepo;
 
 	public static void main(String[] args) {
 		SpringApplication.run(SpringJpaNotesApplication.class, args);
 	}
 
+	@Autowired
+	private ProductService productService;
+
 	@Override
-	public void run(String... args) throws Exception {
-		// Create Address object
-		Address address = new Address();
-		address.setStreet("123 Spring Street");
-		address.setCity("Hyderabad");
-		address.setState("Telangana");
-		address.setZipCode("500001");
+	public void run(String... args) {
+		// Create product
+		Product p = productService.createProduct("Laptop", 10, 1200.00);
+		System.out.println("Created Product ID: " + p.getId());
 
-		// Create User object
-		User user = new User();
-		user.setName("Ramya Priyadarshini");
-		user.setEmail("ramya@example.com");
-		user.setAgeInYears(26); // Won’t be stored in DB (Transient)
-		user.setAddress(address);
+		// Update price with specific isolation level
+		productService.updatePrice(p.getId(), 1300.00);
+		System.out.println("Updated price to 1300");
 
-		// Save to DB
-		userRepo.save(user);
+		// Optimistic lock update
+		productService.updateQuantityOptimistic(p.getId(), 8);
+		System.out.println("Updated quantity with optimistic locking");
 
-		// Fetch and print
-		userRepo.findAll().forEach(u -> {
-			System.out.println("User: " + u.getName() + ", Email: " + u.getEmail());
-			System.out.println("City: " + u.getAddress().getCity());
-		});
+		// Pessimistic lock update
+		productService.updateQuantityPessimistic(p.getId(), 5);
+		System.out.println("Updated quantity with pessimistic locking");
 	}
 }
