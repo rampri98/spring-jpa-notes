@@ -1,119 +1,104 @@
-# Spring Data JPA – Entity Mapping
+# Spring Data JPA – Repositories
 
-## 1. Entity Basics
-### `@Entity`
-- Marks a class as a **JPA entity** (maps to a DB table).
-- Must have:
-  - A no-argument constructor (can be `protected`).
-  - A primary key field.
-- The class **must not be final** and **fields must be non-final** for proxying.
+## 1. Repository Overview
+- Spring Data JPA provides pre-built **repository interfaces** to eliminate boilerplate CRUD code.
+- All repositories extend from the **`Repository`** marker interface.
+- Main repository types:
+  - `CrudRepository<T, ID>` → Basic CRUD operations.
+  - `PagingAndSortingRepository<T, ID>` → CRUD + pagination & sorting.
+  - `JpaRepository<T, ID>` → CRUD + pagination/sorting + JPA-specific features.
+
+---
+
+## 2. `CrudRepository`
+- Generic interface for CRUD operations.
+- Common methods:
+  - `save(entity)` → Insert or update.
+  - `findById(id)` → Retrieve one record.
+  - `findAll()` → Retrieve all records.
+  - `deleteById(id)` → Delete by ID.
+  - `count()` → Count total records.
 
 ```java
-import jakarta.persistence.*;
-
-@Entity
-public class User {
-    // fields, getters, setters
-}
+public interface UserRepository extends CrudRepository<User, Long> { }
 ```
 
 ---
 
-## 2. Table Mapping
-### `@Table`
-- Customizes table details.
-- Common attributes:
-  - `name` → table name in DB
-  - `schema` → schema name (if applicable)
-  - `uniqueConstraints` → for unique combinations
+## 3. `PagingAndSortingRepository`
+- Extends `CrudRepository` with pagination and sorting features.
+- Key methods:
+  - `findAll(Sort sort)`
+  - `findAll(Pageable pageable)`
 
 ```java
-@Entity
-@Table(name = "users", schema = "app_schema")
-public class User {  }
+Page<User> users = userRepository.findAll(
+    PageRequest.of(0, 10, Sort.by("name"))
+);
 ```
 
 ---
 
-## 3. Primary Key Mapping
-### `@Id`
-- Marks the **primary key** field.
-
-### `@GeneratedValue`
-- Configures primary key generation strategy.
-- Strategies:
-  - `AUTO` → Provider chooses (default)
-  - `IDENTITY` → Auto-increment by DB
-  - `SEQUENCE` → Uses DB sequence
-  - `TABLE` → Uses table to generate keys
+## 4. `JpaRepository`
+- Extends `PagingAndSortingRepository` and `CrudRepository`.
+- Adds methods like:
+  - `flush()`
+  - `saveAndFlush(entity)`
+  - `deleteInBatch(entities)`
+  - `getOne(id)`
 
 ```java
-@Id
-@GeneratedValue(strategy = GenerationType.IDENTITY)
-private Long id;
+public interface UserRepository extends JpaRepository<User, Long> { }
 ```
 
 ---
 
-## 4. Column Mapping
-### `@Column`
-- Customizes how a field maps to a column.
-- Common attributes:
-  - `name` → DB column name
-  - `nullable` → `true` (default) or `false`
-  - `length` → Max size (for `VARCHAR`)
-  - `unique` → Adds unique constraint
+## 5. Derived Query Methods
+- Queries can be derived **from method names**.
+- Naming convention: [Action]By[Field][Condition][Operator][And/Or][Field][Condition][Operator]...[OrderByFieldAsc/Desc]
+
+- Examples:
+  - `findByName(String name)` → `SELECT * FROM user WHERE name = ?`
+  - `findByAgeGreaterThan(int age)`
+  - `findByNameAndCity(String name, String city)`
+- Common keywords: `And`, `Or`, `Between`, `LessThan`, `Like`, `OrderBy`.
 
 ```java
-@Column(name = "email_address", nullable = false, unique = true, length = 100)
-private String email;
+List<User> findByEmailContaining(String keyword);
 ```
 
 ---
 
-## 5. Transient Fields
-### `@Transient`
-- Field is **not persisted** to the database.
-- Used for calculated or temporary values.
+## 6. `@Query` Annotation
+- Define custom queries using JPQL or native SQL.
+- JPQL → Uses entity names & fields.
+- Native SQL → Uses table/column names.
 
 ```java
-@Transient
-private int sessionLoginAttempts;
+@Query("SELECT u FROM User u WHERE u.email = ?1")
+List<User> findByEmailJPQL(String email);
+
+@Query(value = "SELECT * FROM users WHERE email = ?1", nativeQuery = true)
+List<User> findByEmailNative(String email);
 ```
 
 ---
 
-## 6. Embedded Objects
-- Helps group related fields into reusable components.
-
-### `@Embeddable`
-- Marks a class whose fields are **mapped into the entity’s table**.
+## 7. Modifying Queries
+- For **update** or **delete** operations.
+- Must use `@Modifying` and `@Transactional`.
 
 ```java
-@Embeddable
-public class Address {
-    private String street;
-    private String city;
-}
-```
-
-### `@Embedded`
-- Used inside an entity to include the embeddable object.
-
-```java
-@Entity
-public class User {
-    @Embedded
-    private Address address;
-}
+@Transactional
+@Modifying
+@Query("UPDATE User u SET u.status = ?2 WHERE u.id = ?1")
+int updateUserStatus(Long id, String status);
 ```
 
 ---
 
-## 7. Workflow Summary
-1. **Annotate** with `@Entity`
-2. **Map table** with `@Table` (optional)
-3. **Define primary key** with `@Id` + `@GeneratedValue`
-4. **Customize columns** with `@Column`
-5. **Exclude non-persistent** fields with `@Transient`
-6. **Reuse field groups** with `@Embeddable` + `@Embedded`
+## 8. Workflow Summary
+1. Choose the correct repository type (`JpaRepository` is most common).
+2. Use **derived query methods** for simple queries.
+3. Use `@Query` for complex/custom queries.
+4. Use `@Modifying` with `@Transactional` for update/delete queries.
